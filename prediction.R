@@ -17,6 +17,8 @@ loadPackages <- function () {
     library(caret)
     # Random forest classification library
     library(randomForest)
+    # Decision tree
+    library(rpart)
     
 }
 
@@ -46,7 +48,7 @@ setConstants <- function () {
 }
 
 
-download.pmlfile <- function(dir=getwd() ) {
+download.pmlfiles <- function(dir=getwd() ) {
 # This function downloads fitness data into the specified directory.
 # If no directory is specified, the current working directory is
 # used. The file is not downloaded if it already exists.
@@ -117,51 +119,6 @@ remove.metadata.cols <- function (df) {
     
 }
 
-## Step 1: Read & preprocess data
-loadPackages()
-setConstants()
-download.pmlfile(proj.dir)
-training.raw <- read.pmlfile("pml-training.csv")
-testing.raw <- read.pmlfile("pml-testing.csv")
-
-training.data <- remove.na.cols(training.raw)
-training.data <- remove.metadata.cols(training.data)
-
-testing.data <- remove.na.cols(testing.raw)
-testing.data <- remove.metadata.cols(testing.data)
-
-## Step 2: Build prediction model
-
-# remove zero variance variables, if any
-
-nsv.cols <- nearZeroVar (training.data)
-if (length(nsv.cols) > 0) {
-    training.data <- training.data[-nsv.cols]
-}
-
-# split into training & validation sets
-
-in.train <- createDataPartition(training.data$classe, p=train.pct, list=FALSE)
-train.set <- training.data[in.train,]
-validate.set <- training.data[-in.train,]
-
-# build prediction model using random forests, with dependent variable
-# "classe" and using all others as predictors
-
-y <- as.factor(train.set$classe)
-x <- train.set[-ncol(train.set)] # Remove last column (classe)
-rf <- randomForest(y ~ ., data=x)
-
-# Print accuracy of predictions
-train.pred <- predict (rf, train.set)
-confusionMatrix(train.pred, train.set$classe)
-
-# Validate model with validation set and print accuracy
-valid.pred <- predict (rf, validate.set)
-confusionMatrix(valid.pred,validate.set$classe)
-
-## Step 3: Write output files with predictions
-
 # This function was supplied by class instructors
 pml_write_files = function(x){
   n = length(x)
@@ -170,7 +127,4 @@ pml_write_files = function(x){
     write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
   }
 }
-
-test.pred <- predict(rf, testing.raw)
-pml_write_files(test.pred)
 

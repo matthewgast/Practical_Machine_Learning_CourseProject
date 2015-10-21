@@ -1,0 +1,152 @@
+---
+title: "Prediction of Activity by Performance Measurement"
+author: "Matthew Gast"
+date: "October 2015"
+output:
+  pdf_document: 
+    fig_height: 3
+  html_document:
+    fig_caption: yes
+    keep_md: yes
+---
+
+## Background
+
+Quantified self devices collect data on personal activity.  One limitation of these devices is that users regularly measure the amount of an activity, but not its quality.  This project uses accelerometer data from a series of activities done both correctly and incorrectly.
+
+Six subjects in the project were asked to lift barbells in one of five different ways:
+
++ Class A: exactly according to the specification
++ Class B: throwing the elbows to the front
++ Class C: lifting the dumbbell only halfway
++ Class D: lowering the dumbbell only halfway
++ Class E: throwing the hips to the front
+
+More information is available from the website here:
+http://groupware.les.inf.puc-rio.br/har (see the section on the Weight
+Lifting Exercise Dataset).
+
+## Goal
+
+The purpose of this project is to use data to predict the manner in which the weight lift was performed.  The outcome is the activity type, stored in the "classe" variable in the training set.
+
+Contents
++ How you built your model
++ How you used cross validation
++ What you think the expected out of sample error is
++ Why you made teh choices you did
+
+Constraints
++ Write up < 2000 words
++ < 5 figures
++ It will make it easier for the graders if you submit a repo with a
+gh-pages branch so the HTML page can be viewed online (and you always
+want to make it easy on graders :-).
+
+## Load the data
+
+```{r setup_environment, results='hide', message=FALSE, warning=FALSE}
+source("prediction.R")
+loadPackages()
+setConstants()
+```
+
+Begin by downloading the data and reading it into data structures.
+The read functions defined for this project automatically convert
+Excel division-by-zero (#DIV/O!") and unavailable values into R's NA
+value.
+
+```{r download_data}
+download.pmlfiles(proj.dir)
+training.raw <- read.pmlfile("pml-training.csv")
+testing.raw <- read.pmlfile("pml-testing.csv")
+```
+
+## Clean Data
+
+To clean the data, remove columns with NA values and the metadata columns.
+
+```{r clean_data}
+training.data <- remove.na.cols(training.raw)
+training.data <- remove.metadata.cols(training.data)
+testing.data <- remove.na.cols(testing.raw)
+testing.data <- remove.metadata.cols(testing.data)
+```
+
+## Model Building
+
+Remove any columns that have low variance.
+
+```{r zerovar_remove}
+nsv.cols <- nearZeroVar (training.data)
+if (length(nsv.cols) > 0) {
+    training.data <- training.data[-nsv.cols]
+}
+```
+
+### Training and validation sets
+
+For cross-validation, split the data into a training component and a
+test component.  Note that the split is controlled by a global
+variable.
+
+```{r splitdata}
+in.train <- createDataPartition(training.data$classe, p=train.pct, list=FALSE)
+train.set <- training.data[in.train,]
+test.set <- training.data[-in.train,]
+```
+
+### Model building
+
+The dependent variable in the model is a factor, so re-cast the output
+of the prediction function as a factor.
+
+```{r model_setup}
+y <- as.factor(train.set$classe)
+x <- train.set[-ncol(train.set)]
+```
+
+### Random Forest model
+
+First, try a random forest model.
+
+```{r rf_model}
+model.rf <- randomForest(y ~ ., data=x)
+```
+
+Print accuracy of predictions against the training set.
+
+```{r rf_accuracy_train}
+rf.train.pred <- predict (model.rf, train.set)
+confusionMatrix(rf.train.pred, train.set$classe)
+```
+
+For validation of the model, test the accuracy against data not used to train the model.  Still looks good!
+
+```{r rf_accuracy_test}
+rf.test.pred <- predict (model.rf, test.set)
+confusionMatrix(rf.test.pred,test.set$classe)
+```
+
+### Decision tree model
+
+Set up a classification tree to see if it works better.
+
+```{r dt_model}
+model.dt <- rpart(y ~ ., data=x, method="class")
+dt.test.pred <- predict(model.dt, test.set, type="class")
+confusionMatrix(dt.valid.pred, test.set$classe)
+```
+
+Accuracy is only 71%, compared to 99% in the random forest model.
+
+### Model choice
+
+The random forest model has much better predictive value.
+
+## Predict on test data and write it out
+
+```{r rf_test_prediction_write} 
+test.pred <- predict(rf, testing.raw)
+pml_write_files(test.pred)
+```
