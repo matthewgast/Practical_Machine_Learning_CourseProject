@@ -118,6 +118,7 @@ remove.metadata.cols <- function (df) {
 }
 
 ## Step 1: Read & preprocess data
+loadPackages()
 setConstants()
 download.pmlfile(proj.dir)
 training.raw <- read.pmlfile("pml-training.csv")
