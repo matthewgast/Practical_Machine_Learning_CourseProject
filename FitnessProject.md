@@ -4,9 +4,13 @@ October 2015
 
 ## Background
 
-Quantified self devices collect data on personal activity.  One limitation of these devices is that users regularly measure the amount of an activity, but not its quality.  This project uses accelerometer data from a series of activities done both correctly and incorrectly.
+Quantified self devices collect data on personal activity.  One
+limitation of these devices is that users regularly measure the amount
+of an activity, but not its quality.  This project uses accelerometer
+data from a series of activities done both correctly and incorrectly.
 
-Six subjects in the project were asked to lift barbells in one of five different ways:
+Six subjects in the project were asked to lift barbells in one of five
+different ways:
 
 + Class A: exactly according to the specification
 + Class B: throwing the elbows to the front
@@ -20,20 +24,9 @@ Lifting Exercise Dataset).
 
 ## Goal
 
-The purpose of this project is to use data to predict the manner in which the weight lift was performed.  The outcome is the activity type, stored in the "classe" variable in the training set.
-
-Contents
-+ How you built your model
-+ How you used cross validation
-+ What you think the expected out of sample error is
-+ Why you made teh choices you did
-
-Constraints
-+ Write up < 2000 words
-+ < 5 figures
-+ It will make it easier for the graders if you submit a repo with a
-gh-pages branch so the HTML page can be viewed online (and you always
-want to make it easy on graders :-).
+The purpose of this project is to use data to predict the manner in
+which the weight lift was performed.  The outcome is the activity
+type, stored in the "classe" variable in the training set.
 
 ## Load the data
 
@@ -42,6 +35,7 @@ want to make it easy on graders :-).
 source("prediction.R")
 loadPackages()
 setConstants()
+registerDoParallel(2)
 ```
 
 Begin by downloading the data and reading it into data structures.
@@ -52,13 +46,16 @@ value.
 
 ```r
 download.pmlfiles(proj.dir)
-training.raw <- read.pmlfile("pml-training.csv")
-testing.raw <- read.pmlfile("pml-testing.csv")
+training.raw <- read.pmlfile("pml-training.csv",proj.dir)
+testing.raw <- read.pmlfile("pml-testing.csv",proj.dir)
 ```
 
 ## Clean Data
 
-To clean the data, remove columns with NA values and the metadata columns.
+To clean the data, remove columns with NA values and the metadata
+columns.  Metadata columns contain timestamps and bucket numbers that
+should not be used in prediction models.  Finally, remove any columns
+that have near-zero variance because they lack predictive power.
 
 
 ```r
@@ -66,25 +63,28 @@ training.data <- remove.na.cols(training.raw)
 training.data <- remove.metadata.cols(training.data)
 testing.data <- remove.na.cols(testing.raw)
 testing.data <- remove.metadata.cols(testing.data)
-```
-
-## Model Building
-
-Remove any columns that have low variance.
-
-
-```r
 nsv.cols <- nearZeroVar (training.data)
 if (length(nsv.cols) > 0) {
     training.data <- training.data[-nsv.cols]
 }
 ```
 
-### Training and validation sets
+## Cross-Validation
 
-For cross-validation, split the data into a training component and a
-test component.  Note that the split is controlled by a global
-variable.
+This paper uses 5-fold cross validation, set up with the
+`trainControl()` method.  By passing the resulting data structure to
+the `train()` function when assessing models, R will automatically
+perform resampling and cross-validation.
+
+
+```r
+CV5fold <- trainControl(method="cv",5)
+```
+
+As part of model validation, split the data into a training component
+and a test component, where the split is controlled by a global
+variable.  This paper uses 60% of the data for training, and 40% for
+testing, but can be changed easily in the `setConstants()` function.
 
 
 ```r
@@ -93,10 +93,11 @@ train.set <- training.data[in.train,]
 test.set <- training.data[-in.train,]
 ```
 
-### Model building
+## Model building
 
 The dependent variable in the model is a factor, so re-cast the output
-of the prediction function as a factor.
+of the prediction function as a factor.  In the training data, remove
+the dependent variable, which is stored in the last column.
 
 
 ```r
@@ -106,152 +107,124 @@ x <- train.set[-ncol(train.set)]
 
 ### Random Forest model
 
-First, try a random forest model.
+The first model assessed is a random forest model, which generally has
+good predictive power but can be quite slow.  To improve speed, this
+paper was set up to run on a 2-core machine.  Random forests can be
+parallelized by using the `parRF` method in the `train()` function.
+To include cross-validation, the `trControl` option is set to use
+cross-validation.  After building the model, get its accuracy based on
+its ability to predict the value for the test data.
 
 
 ```r
-model.rf <- randomForest(y ~ ., data=x)
-```
-
-Print accuracy of predictions against the training set.
-
-
-```r
-rf.train.pred <- predict (model.rf, train.set)
-confusionMatrix(rf.train.pred, train.set$classe)
-```
-
-```
-## Confusion Matrix and Statistics
-## 
-##           Reference
-## Prediction    A    B    C    D    E
-##          A 3348    0    0    0    0
-##          B    0 2279    0    0    0
-##          C    0    0 2054    0    0
-##          D    0    0    0 1930    0
-##          E    0    0    0    0 2165
-## 
-## Overall Statistics
-##                                      
-##                Accuracy : 1          
-##                  95% CI : (0.9997, 1)
-##     No Information Rate : 0.2843     
-##     P-Value [Acc > NIR] : < 2.2e-16  
-##                                      
-##                   Kappa : 1          
-##  Mcnemar's Test P-Value : NA         
-## 
-## Statistics by Class:
-## 
-##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            1.0000   1.0000   1.0000   1.0000   1.0000
-## Specificity            1.0000   1.0000   1.0000   1.0000   1.0000
-## Pos Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000
-## Neg Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000
-## Prevalence             0.2843   0.1935   0.1744   0.1639   0.1838
-## Detection Rate         0.2843   0.1935   0.1744   0.1639   0.1838
-## Detection Prevalence   0.2843   0.1935   0.1744   0.1639   0.1838
-## Balanced Accuracy      1.0000   1.0000   1.0000   1.0000   1.0000
-```
-
-For validation of the model, test the accuracy against data not used to train the model.  Still looks good!
-
-
-```r
+model.rf <- train(y~.,data=x,method="parRF",trControl=CV5fold)
 rf.test.pred <- predict (model.rf, test.set)
-confusionMatrix(rf.test.pred,test.set$classe)
+cm.rf <- confusionMatrix(rf.test.pred,test.set$classe)
 ```
 
-```
-## Confusion Matrix and Statistics
-## 
-##           Reference
-## Prediction    A    B    C    D    E
-##          A 2226    6    0    0    0
-##          B    5 1507   12    0    0
-##          C    0    5 1353   23    1
-##          D    0    0    3 1261    7
-##          E    1    0    0    2 1434
-## 
-## Overall Statistics
-##                                           
-##                Accuracy : 0.9917          
-##                  95% CI : (0.9895, 0.9936)
-##     No Information Rate : 0.2845          
-##     P-Value [Acc > NIR] : < 2.2e-16       
-##                                           
-##                   Kappa : 0.9895          
-##  Mcnemar's Test P-Value : NA              
-## 
-## Statistics by Class:
-## 
-##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9973   0.9928   0.9890   0.9806   0.9945
-## Specificity            0.9989   0.9973   0.9955   0.9985   0.9995
-## Pos Pred Value         0.9973   0.9888   0.9790   0.9921   0.9979
-## Neg Pred Value         0.9989   0.9983   0.9977   0.9962   0.9988
-## Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838
-## Detection Rate         0.2837   0.1921   0.1724   0.1607   0.1828
-## Detection Prevalence   0.2845   0.1942   0.1761   0.1620   0.1832
-## Balanced Accuracy      0.9981   0.9950   0.9923   0.9895   0.9970
-```
+The accuracy for the model is 0.9919704, and the estimated
+OOB error is 0.0080296
 
 ### Decision tree model
 
-Set up a classification tree to see if it works better.
+For the second model type, set up a classification tree.  After
+building the model, obtain its accuracy on the test data.
 
 
 ```r
 model.dt <- rpart(y ~ ., data=x, method="class")
 dt.test.pred <- predict(model.dt, test.set, type="class")
-confusionMatrix(dt.test.pred, test.set$classe)
+cm.dt <- confusionMatrix(dt.test.pred, test.set$classe)
+```
+
+Accuracy is 0.7267397, so the estimated
+OOB error is 0.2732603
+
+### Boosted model
+
+Finally, consider a generic boosted model, again with a 5-fold cross-validation.
+
+
+```r
+model.gbm <- train(y~.,data=x,method="gbm",trControl=CV5fold)
 ```
 
 ```
-## Confusion Matrix and Statistics
+## Loading required package: gbm
+## Loading required package: survival
 ## 
-##           Reference
-## Prediction    A    B    C    D    E
-##          A 2024  315   27  149   38
-##          B   54  782   68   59  107
-##          C   54  295 1162  146  190
-##          D   82  105  110  859  110
-##          E   18   21    1   73  997
+## Attaching package: 'survival'
 ## 
-## Overall Statistics
-##                                           
-##                Accuracy : 0.7423          
-##                  95% CI : (0.7325, 0.7519)
-##     No Information Rate : 0.2845          
-##     P-Value [Acc > NIR] : < 2.2e-16       
-##                                           
-##                   Kappa : 0.6728          
-##  Mcnemar's Test P-Value : < 2.2e-16       
+## The following object is masked from 'package:caret':
 ## 
-## Statistics by Class:
+##     cluster
 ## 
-##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9068  0.51515   0.8494   0.6680   0.6914
-## Specificity            0.9058  0.95449   0.8943   0.9380   0.9824
-## Pos Pred Value         0.7928  0.73084   0.6291   0.6785   0.8982
-## Neg Pred Value         0.9607  0.89138   0.9657   0.9351   0.9339
-## Prevalence             0.2845  0.19347   0.1744   0.1639   0.1838
-## Detection Rate         0.2580  0.09967   0.1481   0.1095   0.1271
-## Detection Prevalence   0.3254  0.13638   0.2354   0.1614   0.1415
-## Balanced Accuracy      0.9063  0.73482   0.8718   0.8030   0.8369
+## Loading required package: splines
+## Loaded gbm 2.1.1
+## Loading required package: plyr
 ```
 
-Accuracy is only 71%, compared to 99% in the random forest model.
+```
+## Iter   TrainDeviance   ValidDeviance   StepSize   Improve
+##      1        1.6094             nan     0.1000    0.2392
+##      2        1.4585             nan     0.1000    0.1576
+##      3        1.3582             nan     0.1000    0.1220
+##      4        1.2808             nan     0.1000    0.1064
+##      5        1.2137             nan     0.1000    0.0873
+##      6        1.1579             nan     0.1000    0.0787
+##      7        1.1078             nan     0.1000    0.0744
+##      8        1.0606             nan     0.1000    0.0666
+##      9        1.0193             nan     0.1000    0.0502
+##     10        0.9878             nan     0.1000    0.0525
+##     20        0.7600             nan     0.1000    0.0255
+##     40        0.5302             nan     0.1000    0.0092
+##     60        0.4006             nan     0.1000    0.0089
+##     80        0.3207             nan     0.1000    0.0061
+##    100        0.2637             nan     0.1000    0.0019
+##    120        0.2214             nan     0.1000    0.0023
+##    140        0.1870             nan     0.1000    0.0008
+##    150        0.1749             nan     0.1000    0.0009
+```
+
+```r
+gbm.test.pred <-predict(model.gbm, test.set)
+cm.gbm <- confusionMatrix(gbm.test.pred, test.set$class)
+```
+
+Accuracy is 0.961764, so the estimated
+OOB error is 0.038236
 
 ### Model choice
 
-The random forest model has much better predictive value.
+The random forest and boosted models both have very high accuracy.  To
+further compare them, consider the relative importance of the top 20
+varables in each model.
 
-## Predict on test data and write it out
+
+```r
+varimp.rf.g <- plot(varImp(model.rf,scale=FALSE))
+varimp.gbm.g <- plot(varImp(model.gbm,scale=FALSE))
+grid.arrange(varimp.rf.g,varimp.gbm.g,ncol=2)
+```
+
+![](FitnessProject_files/figure-html/graphs-1.png) 
+
+Both models use the idential top three variables in predictions, and
+have similar weights for most variables.  Without strong theoretical
+reasons to choose one model over the other, we select the random
+forest model because it has slightly better accuracy than the boosted
+model.
+
+## Test Data Prediction
+
+As a final step, take the test data and make predictions based on the
+random forest model.  Those predictions are then written into the
+current working directory and uploaded for the second part of the
+project.
 
 
 ```r
 test.pred <- predict(model.rf, testing.raw)
 pml_write_files(test.pred)
 ```
+

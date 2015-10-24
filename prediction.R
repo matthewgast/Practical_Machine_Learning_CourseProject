@@ -13,12 +13,11 @@ loadPackages <- function () {
 # Input:  None.
 # Output: None.
 
-    # Caret library supports regression and data training functions
     library(caret)
-    # Random forest classification library
     library(randomForest)
-    # Decision tree
     library(rpart)
+    library(doParallel)
+    library(gridExtra)
     
 }
 
@@ -29,9 +28,13 @@ setConstants <- function () {
 # Output: No function output, but global constants are available in
 # scope.
 
-    # Set fraction of data used for validation and training
-    validation.pct <<- 0.4
-    train.pct <<- 1 - validation.pct
+    # Set seed to make reproducible
+    set.seed(12345)
+
+    # Set fraction of data used for validation and training.
+    # 60% for training and 40% for testing is the usual, but can be changed here
+    test.pct <<- 0.4
+    train.pct <<- 1 - test.pct
 
     # Project directory
     proj.dir <<- "/Users/mgast/Dropbox/data-science-specialization/8-practical-machine-learning/Practical_Machine_Learning_CourseProject"
